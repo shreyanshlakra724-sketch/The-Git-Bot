@@ -3,7 +3,8 @@ import discord
 import os
 from discord.ext import commands
 import aiohttp
-
+import matplotlib.pyplot as plt
+import io
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -151,6 +152,84 @@ async def contributors(ctx, repository_url):
                 )
 
             await ctx.send(embed=contributors_embed)
+
+
+
+@bot.command()
+async def language(ctx, repository_url):
+    await ctx.send("Fetching lanagues for the repository...")
+    split_url = repository_url.split('/')
+
+    owner = split_url[3]
+    repo_name = split_url[4]
+
+    api_url_lang = f"https://api.github.com/repos/{owner}/{repo_name}/languages"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url_lang) as response:
+            data = await response.json()
+
+            if response.status == 404:
+                await ctx.send("Repository not found, please check the URL and try again.")
+                return
+
+            elif response.status != 200:
+                await ctx.send(f"Failed to fetch languages, staus code: {response.status}")
+                return
+            
+            elif not data:
+                await ctx.send("No languages found for this repository.")
+                return
+
+            languages = list(data.keys())
+            bytes_count = list(data.values())
+            sorted_data = sorted(data.items(), key=lambda item: item[1])
+
+            languages = [item[0] for item in sorted_data]
+            bytes_count = [item[1] for item in sorted_data]
+            total_bytes = sum(bytes_count)
+            percentages = [(b / total_bytes) * 100 for b in bytes_count]
+
+            plt.figure(figsize=(9, max(4, len(languages) * 0.5)))
+            bars = plt.barh(languages, percentages)
+            plt.xlabel("Percentage of Code (%)")
+            plt.title(f"Languages for repository {owner}/{repo_name}")
+
+            for bar, percentage in zip(bars, percentages):
+                plt.text(
+                    bar.get_width() + 0.3,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{percentage:.1f}%",
+                    va="center"
+                )
+
+            plt.xlim(0, max(percentages) * 1.2)
+            plt.tight_layout()
+
+            image_buffer = io.BytesIO()
+            plt.savefig(image_buffer, format='png', bbox_inches='tight')
+            plt.close()
+            image_buffer.seek(0)
+
+            chart_file = discord.File(fp=image_buffer, filename='languages_chart.png')
+
+            lang_embed = discord.Embed(
+                title=f"Languages for repository {owner}/{repo_name}",
+                description="List of languages used in the repository:",
+                color=discord.Color.from_rgb(255, 225, 225),
+            )
+
+            for language, bytes_count in data.items():
+                lang_embed.add_field(
+                    name=language,
+                    value=f"{bytes_count} bytes",
+                    inline=True
+                )
+
+            lang_embed.set_image(url="attachment://languages_chart.png")
+
+            await ctx.send(embed=lang_embed, file=chart_file)
+
 
 
 bot.run(os.environ.get('BOT_TOKEN'))
