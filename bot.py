@@ -58,6 +58,7 @@ async def help(ctx):
     help_message.add_field(name="!issues <repository_url>", value="Fetches the latest issues of a GitHub repository and displays them in an embed.", inline=False)
     help_message.add_field(name="!contributors <contributors>", value="Fetches the contributors of a GitHub repository and displays their profile links in an embed.", inline=False)
     help_message.add_field(name="!stats <repository_url>", value="Fetches the statistics of a GitHub repository and displays them in an embed graphically.", inline=False)
+    help_message.add_field(name="!language <repository_url>", value="Fetches the languages used in a GitHub repository and displays them in an embed graphically.", inline=False)
     await ctx.send(embed=help_message)
 
 #Main Bot Commands(Total there are 6 currently might add some later)
@@ -230,6 +231,141 @@ async def language(ctx, repository_url):
 
             await ctx.send(embed=lang_embed, file=chart_file)
 
+class repCheck(discord.ui.View):
+    def __init__(self, repositories, repository_name):
+        super().__init__(timeout=100)
+        self.repositories = repositories
+        self.repository_name = repository_name
+        self.current_page = 0
+        self.per_page = 5
+
+    def create_embed(self):
+        start_index = self.current_page * self.per_page
+        end_index = start_index + self.per_page
+
+        page_results = self.repositories[start_index:end_index]
+
+        repo_embed = discord.Embed(
+            title=f"Repositories matching '{self.repository_name}'",
+            description=f"Page {self.current_page + 1}",
+            color=discord.Color.from_rgb(255, 225, 225)
+        )
+
+        repo_embed.add_field(
+            name="Repository Name",
+            value="\n".join([f"[{repo['name']}]({repo['html_url']})" for repo in page_results]),
+            inline=True
+        )
+
+        repo_embed.add_field(
+            name="Owner",
+            value="\n".join([repo['owner']['login'] for repo in page_results]),
+            inline=True
+        )
+
+        return repo_embed
+
+
+    @discord.ui.button(label="Next ➡", style=discord.ButtonStyle.primary)
+    async def next_page(self, interaction, button):
+        if (self.current_page + 1) * self.per_page >= len(self.repositories):
+            await interaction.response.send_message(
+                "There are no more results.",
+                ephemeral=True
+            )
+            return
+
+        self.current_page += 1
+
+        await interaction.response.edit_message(
+            embed=self.create_embed(),
+            view=self
+        )
+
+
+
+
+            
+
+        
+
+@bot.command()
+async def search(ctx, *,repository_name):
+    await ctx.send(f"Searching for {repository_name}...", delete_after=5)
+    api_url_name = f"https://api.github.com/search/repositories?q={repository_name}"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(api_url_name) as response:
+            data = await response.json()
+
+            if response.status == 404:
+                await ctx.send("Repository not found. Please check the name and try again.")
+                return
+            elif response.status != 200:
+                await ctx.send(f"Failed to search for repository. Status code: {response.status}")
+                return
+            elif not data.get('items'):
+                await ctx.send("No repositories found with that name.")
+                return
+
+            repositories = data['items']
+
+            view = repCheck(repositories, repository_name)
+            await ctx.send(embed=view.create_embed(), view=view)
+
+
+@bot.command()
+async def user(ctx, user__):
+    await ctx.send("Fetching information for user ", delete_after=5)
+    if user__.startswith("https://github.com"):
+        user__ = user__.split('/')[-1]
+    elif user__.startswith("http://github.com"):
+        user__ = user__.split('/')[-1]
+    elif user__.startswith("github.com"):
+        user__ = user__.split('/')[-1]
+
+    api_url_user = f"https://api.github.com/users/{user__}"
+    async with aiohttp.ClientSession() as session:
+        fetch_user = await session.get(api_url_user)
+        data = await fetch_user.json()
+
+        if fetch_user.status == 404:
+            await ctx.send("User not found. Please check the username and try again.")
+            return
+        elif fetch_user.status != 200:
+            await ctx.send(f"Failed to fetch user information. Status code: {fetch_user.status}")
+            return
+        elif not data:
+            await ctx.send("No information found for this user.")
+            return
+
+        user_embed = discord.Embed(
+            title=data['login'],
+            description=data['bio'] or "No bio provided.",
+            color=discord.Color.from_rgb(255, 225, 225),
+        )
+
+        user_embed.add_field(name="Name", value=data['name'] or "No name provided.", inline=True)
+        user_embed.add_field(name="Public Repositories", value=data['public_repos'], inline=True)
+        user_embed.add_field(name="Followers", value=data['followers'], inline=True)
+        user_embed.add_field(name="Following", value=data['following'], inline=True)
+
+        user_embed.add_field(name="Location", value=data['location'] or "No location provided.", inline=True)
+        user_embed.add_field(name="Company", value=data['company'] or "No company provided.", inline=True)
+        user_embed.add_field(name="Blog", value=data['blog'] or "No blog provided.", inline=True)
+        user_embed.add_field(name="contributions", value=data['html_url'], inline=True)
+
+        await ctx.send(embed=user_embed)
+
+
+@bot.command()
+async def commits(ctx, repository_url):
+    await ctx.send("Fetching commits for the repository...", delete_after=5)
+
+    commit_url  = repository_url.replace(
+        "github.com",
+        "api.github.com/repos"
+    ) + "/commits"
 
 
 bot.run(os.environ.get('BOT_TOKEN'))
