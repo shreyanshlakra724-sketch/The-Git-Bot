@@ -46,22 +46,38 @@ async def on_ready():
 
 
 
+# Cooldown: 1 init response every 10 seconds per channel
+init_cooldown = commands.CooldownMapping.from_cooldown(
+    1, 10, commands.BucketType.channel
+)
+
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
-    init_message = discord.Embed(
-        title = "Github Repository Tracker",
-        description = "Welcome to the Github Repository Tracker! An open-source bot allowing you to track repositories,search for repositories and many more features.To learn more type !help",
-        color = discord.Color.from_rgb(255, 225, 225),
-        url = "https://github.com/shreyanshlakra724-sketch/The-Git-Bot",
-        type = "rich"
-    )
-
     msg = message.content.strip().lower()
 
     if msg == "init":
+        bucket = init_cooldown.get_bucket(message)
+
+        if bucket.update_rate_limit():
+            return
+
+        init_message = discord.Embed(
+            title="Github Repository Tracker",
+            description=(
+                "Welcome to the Github Repository Tracker! "
+                "An open-source bot allowing you to track repositories, "
+                "search for repositories and many more features. "
+                "To learn more type !help"
+            ),
+            color=discord.Color.from_rgb(255, 225, 225),
+            url="https://github.com/shreyanshlakra724-sketch/The-Git-Bot",
+            type="rich"
+        )
+
         await message.channel.send(embed=init_message)
 
     await bot.process_commands(message)
