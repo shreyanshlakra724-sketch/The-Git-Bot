@@ -1,14 +1,38 @@
-
 import discord
 import os
 from discord.ext import commands
 import aiohttp
 import matplotlib.pyplot as plt
 import io
+import urllib.parse as urlparse
+import re
 
 intents = discord.Intents.default()
 intents.message_content = True
 
+def urlCheck(repository_url):
+    parsed = urlparse.urlparse(repository_url)
+
+    if parsed.scheme != "https" or parsed.hostname != "github.com":
+        return None
+
+    split_url = parsed.path.strip("/").split("/")
+
+    if len(split_url) != 2:
+        return None
+
+    owner = split_url[0]
+    repo_name = split_url[1].removesuffix(".git")
+
+    if not re.fullmatch(r"[A-Za-z0-9-]+", owner):
+        return None
+
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", repo_name):
+        return None
+
+    api_url = f"https://api.github.com/repos/{owner}/{repo_name}"
+
+    return owner, repo_name, api_url  
 
 
 bot = commands.Bot(command_prefix='!', intents=intents,help_command=None)
@@ -63,20 +87,21 @@ async def help(ctx):
     await ctx.send(embed=help_message)
 
 #Total of 7 commands
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() # !track command
 async def track(ctx, repository_url):
-    await ctx.send(f"Tracking repository...",delete_after=5)
-    split_url = repository_url.split('/')
+    await ctx.send("Tracking repository...", delete_after=5)
 
-    owner = split_url[3]
-    repo_name = split_url[4]
+    url_data = urlCheck(repository_url)
+
+    if not url_data:
+        await ctx.send("Invalid repository URL. Please provide a valid GitHub repository URL.")
+        return
+
+    owner, repo_name, api_url = url_data
+
 
     await ctx.send(f"Owner: {owner}, Repository Name: {repo_name}")
-
-    api_url = repository_url.replace(
-        "github.com",
-        "api.github.com/repos"
-    )
 
     async with aiohttp.ClientSession() as session:
         async with session.get(api_url) as response:
@@ -117,16 +142,20 @@ async def track(ctx, repository_url):
             repo_embed.set_footer(text="For more information on contributors(!contributors <repository_url>) and languages(!languages <repository_url>).")
 
             await ctx.send(embed=repo_embed)
-
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() #!contributors command
 async def contributors(ctx, repository_url):
-    await ctx.send(f"Fetching contributors for the repository...", delete_after=5)
-    split_url = repository_url.split('/')
+    await ctx.send("Fetching contributors for the repository...", delete_after=5)
 
-    owner = split_url[3]
-    repo_name = split_url[4]
+    url_data = urlCheck(repository_url)
 
-    api_url = f"https://api.github.com/repos/{owner}/{repo_name}/contributors"
+    if not url_data:
+        await ctx.send("Invalid repository URL. Please provide a valid GitHub repository URL.")
+        return
+
+    owner, repo_name, api_url = url_data
+
+    api_url = f"{api_url}/contributors"
 
     async with aiohttp.ClientSession() as session:
         async with session.get(api_url) as response:
@@ -162,19 +191,23 @@ async def contributors(ctx, repository_url):
             await ctx.send(embed=contributors_embed)
 
 
-
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() #!language command
 async def language(ctx, repository_url):
-    await ctx.send("Fetching lanagues for the repository...", delete_after=5)
-    split_url = repository_url.split('/')
+    await ctx.send("Fetching repository languages...", delete_after=5)
 
-    owner = split_url[3]
-    repo_name = split_url[4]
+    url_data = urlCheck(repository_url)
 
-    api_url_lang = f"https://api.github.com/repos/{owner}/{repo_name}/languages"
+    if not url_data:
+        await ctx.send("Invalid repository URL. Please provide a valid GitHub repository URL.")
+        return
+
+    owner, repo_name, api_url = url_data
+
+    api_url = f"{api_url}/languages"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(api_url_lang) as response:
+        async with session.get(api_url) as response:
             data = await response.json()
 
             if response.status == 404:
@@ -184,7 +217,7 @@ async def language(ctx, repository_url):
             elif response.status != 200:
                 await ctx.send(f"Failed to fetch languages, staus code: {response.status}")
                 return
-            
+
             elif not data:
                 await ctx.send("No languages found for this repository.")
                 return
@@ -289,7 +322,7 @@ class repCheck(discord.ui.View):
             view=self
         )
 
-
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() #!search command
 async def search(ctx, *,repository_name):
     await ctx.send(f"Searching for repository...", delete_after=5)
@@ -314,21 +347,46 @@ async def search(ctx, *,repository_name):
             view = repCheck(repositories, repository_name)
             await ctx.send(embed=view.create_embed(), view=view)
 
-
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() #!user command
 async def user(ctx, user__):
-    await ctx.send("Fetching information for user ", delete_after=5)
-    if user__.startswith("https://github.com"):
-        user__ = user__.split('/')[-1]
-    elif user__.startswith("http://github.com"):
-        user__ = user__.split('/')[-1]
-    elif user__.startswith("github.com"):
-        user__ = user__.split('/')[-1]
+    await ctx.send("Fetching information for user...", delete_after=5)
+
+    user__ = user__.strip()
+
+    if user__.startswith(("https://", "http://")):
+        parsed = urlparse.urlparse(user__)
+
+        if parsed.scheme not in ("https", "http") or parsed.hostname != "github.com":
+            await ctx.send("Invalid GitHub profile URL.")
+            return
+
+        parts = parsed.path.strip("/").split("/")
+
+        if len(parts) != 1 or not parts[0]:
+            await ctx.send("Invalid GitHub profile URL.")
+            return
+
+        user__ = parts[0]
+
+    elif user__.startswith("github.com/"):
+        parts = user__.strip("/").split("/")
+
+        if len(parts) != 2 or parts[0] != "github.com" or not parts[1]:
+            await ctx.send("Invalid GitHub profile URL.")
+            return
+
+        user__ = parts[1]
+
+    if not re.fullmatch(r"[A-Za-z0-9-]+", user__):
+        await ctx.send("Invalid GitHub username.")
+        return
 
     api_url_user = f"https://api.github.com/users/{user__}"
+
     async with aiohttp.ClientSession() as session:
-        fetch_user = await session.get(api_url_user)
-        data = await fetch_user.json()
+        async with session.get(api_url_user) as fetch_user:
+            data = await fetch_user.json()
 
         if fetch_user.status == 404:
             await ctx.send("User not found. Please check the username and try again.")
@@ -360,17 +418,23 @@ async def user(ctx, user__):
 
 
 
+@commands.cooldown(1, 8, commands.BucketType.user)
 @bot.command() #!commits command
 async def commits(ctx, repository_url):
-    await ctx.send("Fetching commits for the repository...", delete_after=5)
+    await ctx.send("Fetching repository commits...", delete_after=5)
 
-    commit_url  = repository_url.replace(
-        "github.com",
-        "api.github.com/repos"
-    ) + "/commits"
+    url_data = urlCheck(repository_url)
+
+    if not url_data:
+        await ctx.send("Invalid repository URL. Please provide a valid GitHub repository URL.")
+        return
+
+    owner, repo_name, api_url = url_data
+
+    api_url = f"{api_url}/commits"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(commit_url) as response:
+        async with session.get(api_url) as response:
             data = await response.json()
 
             if response.status == 404:
@@ -400,19 +464,27 @@ async def commits(ctx, repository_url):
 
             commits_embed.set_footer(text="Note: Only the latest 10 commits are displayed.")
             await ctx.send(embed=commits_embed)
-
-@bot.command() #!issues command
+@commands.cooldown(1, 8, commands.BucketType.user)
+@bot.command()  #!issues command
 async def issues(ctx, repository_url):
-    await ctx.send("Fetching issues for the repository...", delete_after=5)
+    await ctx.send("Fetching repository issues...", delete_after=5)
 
-    issues_url = repository_url.replace(
-        "github.com",
-        "api.github.com/repos"
-    ) + "/issues"
+    url_data = urlCheck(repository_url)
+
+    if not url_data:
+        await ctx.send("Invalid repository URL. Please provide a valid GitHub repository URL.")
+        return
+
+    owner, repo_name, api_url = url_data
+
+    api_url = f"{api_url}/issues"
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(issues_url) as response:
+        async with session.get(api_url) as response:
             data = await response.json()
+
+            data = [issue for issue in data if 'pull_request' not in issue]
+
 
             if response.status == 404:
                 await ctx.send("Repository not found. Please check the URL and try again.")
@@ -423,6 +495,8 @@ async def issues(ctx, repository_url):
             elif not data:
                 await ctx.send("No issues found for this repository.")
                 return
+
+            data = [issue for issue in data if 'pull_request' not in issue]
 
             issues_embed = discord.Embed(
                 title=f"Latest Issues for {repository_url}",
@@ -441,5 +515,5 @@ async def issues(ctx, repository_url):
 
             await ctx.send(embed=issues_embed)
 
-            
+
 bot.run(os.environ.get('BOT_TOKEN'))
