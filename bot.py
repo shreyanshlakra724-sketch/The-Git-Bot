@@ -14,9 +14,11 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents,help_command=None)
 
 
+
 @bot.event
 async def on_ready():
     print(f"We have logged in as {bot.user}")
+
 
 
 
@@ -57,12 +59,11 @@ async def help(ctx):
     help_message.add_field(name="!commits <repository_url>", value="Fetches the latest commits of a GitHub repository and displays them in an embed.", inline=False)
     help_message.add_field(name="!issues <repository_url>", value="Fetches the latest issues of a GitHub repository and displays them in an embed.", inline=False)
     help_message.add_field(name="!contributors <contributors>", value="Fetches the contributors of a GitHub repository and displays their profile links in an embed.", inline=False)
-    help_message.add_field(name="!stats <repository_url>", value="Fetches the statistics of a GitHub repository and displays them in an embed graphically.", inline=False)
     help_message.add_field(name="!language <repository_url>", value="Fetches the languages used in a GitHub repository and displays them in an embed graphically.", inline=False)
     await ctx.send(embed=help_message)
 
-#Main Bot Commands(Total there are 6 currently might add some later)
-@bot.command()
+#Total of 7 commands
+@bot.command() # !track command
 async def track(ctx, repository_url):
     await ctx.send(f"Tracking repository...")
     split_url = repository_url.split('/')
@@ -113,7 +114,7 @@ async def track(ctx, repository_url):
 
             await ctx.send(embed=repo_embed)
 
-@bot.command()
+@bot.command() #!contributors command
 async def contributors(ctx, repository_url):
     await ctx.send(f"Fetching contributors for the repository...")
     split_url = repository_url.split('/')
@@ -156,7 +157,7 @@ async def contributors(ctx, repository_url):
 
 
 
-@bot.command()
+@bot.command() #!language command
 async def language(ctx, repository_url):
     await ctx.send("Fetching lanagues for the repository...")
     split_url = repository_url.split('/')
@@ -283,13 +284,7 @@ class repCheck(discord.ui.View):
         )
 
 
-
-
-            
-
-        
-
-@bot.command()
+@bot.command() #!search command
 async def search(ctx, *,repository_name):
     await ctx.send(f"Searching for {repository_name}...", delete_after=5)
     api_url_name = f"https://api.github.com/search/repositories?q={repository_name}"
@@ -314,7 +309,7 @@ async def search(ctx, *,repository_name):
             await ctx.send(embed=view.create_embed(), view=view)
 
 
-@bot.command()
+@bot.command() #!user command
 async def user(ctx, user__):
     await ctx.send("Fetching information for user ", delete_after=5)
     if user__.startswith("https://github.com"):
@@ -358,7 +353,8 @@ async def user(ctx, user__):
         await ctx.send(embed=user_embed)
 
 
-@bot.command()
+
+@bot.command() #!commits command
 async def commits(ctx, repository_url):
     await ctx.send("Fetching commits for the repository...", delete_after=5)
 
@@ -367,5 +363,77 @@ async def commits(ctx, repository_url):
         "api.github.com/repos"
     ) + "/commits"
 
+    async with aiohttp.ClientSession() as session:
+        async with session.get(commit_url) as response:
+            data = await response.json()
 
+            if response.status == 404:
+                await ctx.send("Repository not found. Please check the URL and try again.")
+                return
+            elif response.status != 200:
+                await ctx.send(f"Failed to fetch commits. Status code: {response.status}")
+                return
+            elif not data:
+                await ctx.send("No commits found for this repository.")
+                return
+
+            commits_embed = discord.Embed(
+                title=f"Latest Commits for {repository_url}",
+                description="List of latest commits:",
+                color=discord.Color.from_rgb(255, 225, 225),
+            )
+
+            commits = data[:10]
+
+            for commit in commits:
+                commits_embed.add_field(
+                    name="Commit Message",
+                    value=f"[{commit['commit']['message'][:150]}]({commit['html_url']})",
+                    inline=False
+                )
+
+            commits_embed.set_footer(text="Note: Only the latest 10 commits are displayed.")
+            await ctx.send(embed=commits_embed)
+
+@bot.command() #!issues command
+async def issues(ctx, repository_url):
+    await ctx.send("Fetching issues for the repository...", delete_after=5)
+
+    issues_url = repository_url.replace(
+        "github.com",
+        "api.github.com/repos"
+    ) + "/issues"
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(issues_url) as response:
+            data = await response.json()
+
+            if response.status == 404:
+                await ctx.send("Repository not found. Please check the URL and try again.")
+                return
+            elif response.status != 200:
+                await ctx.send(f"Failed to fetch issues. Status code: {response.status}")
+                return
+            elif not data:
+                await ctx.send("No issues found for this repository.")
+                return
+
+            issues_embed = discord.Embed(
+                title=f"Latest Issues for {repository_url}",
+                description="List of latest issues:",
+                color=discord.Color.from_rgb(255, 225, 225),
+            )
+
+            issues_embed.add_field(
+                name="Issue Title",
+                value="\n".join([f"[{issue['title']}]({issue['html_url']})" for issue in data[:10]]),
+                inline=False
+
+            )
+
+            issues_embed.set_footer(text="Displays only 10 for now")
+
+            await ctx.send(embed=issues_embed)
+
+            
 bot.run(os.environ.get('BOT_TOKEN'))
