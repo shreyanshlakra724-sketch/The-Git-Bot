@@ -37,7 +37,7 @@ async def on_message(message):
 
     msg = message.content.strip().lower()
 
-    if msg == "git init":
+    if msg == "init":
         await message.channel.send(embed=init_message)
 
     await bot.process_commands(message)
@@ -58,14 +58,14 @@ async def help(ctx):
     help_message.add_field(name="!user <username>/<user_profile_link>", value="Fetches information about a GitHub user and displays it in an embed.", inline=False)
     help_message.add_field(name="!commits <repository_url>", value="Fetches the latest commits of a GitHub repository and displays them in an embed.", inline=False)
     help_message.add_field(name="!issues <repository_url>", value="Fetches the latest issues of a GitHub repository and displays them in an embed.", inline=False)
-    help_message.add_field(name="!contributors <contributors>", value="Fetches the contributors of a GitHub repository and displays their profile links in an embed.", inline=False)
+    help_message.add_field(name="!contributors <repository_url>", value="Fetches the contributors of a GitHub repository and displays their profile links in an embed.", inline=False)
     help_message.add_field(name="!language <repository_url>", value="Fetches the languages used in a GitHub repository and displays them in an embed graphically.", inline=False)
     await ctx.send(embed=help_message)
 
 #Total of 7 commands
 @bot.command() # !track command
 async def track(ctx, repository_url):
-    await ctx.send(f"Tracking repository...")
+    await ctx.send(f"Tracking repository...",delete_after=5)
     split_url = repository_url.split('/')
 
     owner = split_url[3]
@@ -88,6 +88,10 @@ async def track(ctx, repository_url):
 
             elif response.status != 200:
                 await ctx.send(f"Failed to fetch repository information. Status code: {response.status}")
+                return
+
+            elif not data:
+                await ctx.send("No information found for this repository.")
                 return
 
             repo_embed = discord.Embed(
@@ -116,7 +120,7 @@ async def track(ctx, repository_url):
 
 @bot.command() #!contributors command
 async def contributors(ctx, repository_url):
-    await ctx.send(f"Fetching contributors for the repository...")
+    await ctx.send(f"Fetching contributors for the repository...", delete_after=5)
     split_url = repository_url.split('/')
 
     owner = split_url[3]
@@ -136,7 +140,7 @@ async def contributors(ctx, repository_url):
                 await ctx.send(f"Failed to fetch contributors. Status code: {response.status}")
                 return
 
-            if not data:
+            elif not data:
                 await ctx.send("No contributors found for this repository.")
                 return
 
@@ -153,13 +157,15 @@ async def contributors(ctx, repository_url):
                     inline=True
                 )
 
+            contributors_embed.set_footer(text="Note: Only the first 25 contributors are displayed.")
+
             await ctx.send(embed=contributors_embed)
 
 
 
 @bot.command() #!language command
 async def language(ctx, repository_url):
-    await ctx.send("Fetching lanagues for the repository...")
+    await ctx.send("Fetching lanagues for the repository...", delete_after=5)
     split_url = repository_url.split('/')
 
     owner = split_url[3]
@@ -286,7 +292,7 @@ class repCheck(discord.ui.View):
 
 @bot.command() #!search command
 async def search(ctx, *,repository_name):
-    await ctx.send(f"Searching for {repository_name}...", delete_after=5)
+    await ctx.send(f"Searching for repository...", delete_after=5)
     api_url_name = f"https://api.github.com/search/repositories?q={repository_name}"
 
     async with aiohttp.ClientSession() as session:
