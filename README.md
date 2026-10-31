@@ -30,3 +30,6 @@ An open-source discord bot for tracking information regarding GitHub repositorie
 
   -Made using Python(Discord.py library,matplotlib,os,aiohttp,io)
   
+Demo URLS:
+https://discord.com/oauth2/authorize?client_id=1563878649248358420&permissions=117760&integration_type=0&scope=bot
+https://discord.gg/MQssTRJb2w
