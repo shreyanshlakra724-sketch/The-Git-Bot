@@ -1,11 +1,11 @@
-#Github Repository/User Tracker Discord Bot
+# Github Repository/User Tracker Discord Bot
 
 An open-source discord bot for tracking information regarding GitHub repositories and users using url/username/repository name.
 <img width="713" height="525" alt="image" src="https://github.com/user-attachments/assets/7069f2e9-c8fe-4490-a51d-5003a7bbccba" />
 
 
 
-#Commands
+# Commands
 
 !track --> Tracks the GitHub repositories, provides information about it github repository url needs to be give in the following format:
   !track <repository_url>
